@@ -21,6 +21,8 @@ public class PandaControl : MonoBehaviour {
 	private PandaSpawner spawner;
 	private Animator animator;
 
+	private List<Platform> passedThroughPlatforms;
+
 	void Awake () {
 		r = rigidbody2D;
 		groundLayer = (1 << LayerMask.NameToLayer ("White")) + (1 << LayerMask.NameToLayer ("Red")) + (1 << LayerMask.NameToLayer ("Blue")) + (1 << LayerMask.NameToLayer ("Yellow"));
@@ -32,41 +34,49 @@ public class PandaControl : MonoBehaviour {
 		animator = gameObject.GetComponent<Animator>();
 		StartCoroutine("MovementInput");	
 		StartCoroutine("PlayerAttacked");
+
+		passedThroughPlatforms = new List<Platform>();
 	}
 
 	void Update() {
-		float dist = 1.25f;
+		float dist = 1.5f;
 		float width = 0.5f;
 		bool movingUp = rigidbody2D.velocity.y > 0;
-		if (!movingUp)
-			return;
-		Vector2[] rays = new Vector2[2];
-		Vector2 pos = new Vector2(transform.position.x, transform.position.y);
-		rays[0] = pos + width * Vector2.right;
-		rays[1] = pos - width * Vector2.right;
-
-		for (int i = 0; i < rays.Length; ++i)
+		if (movingUp)
 		{
-			Vector3 start = new Vector3(rays[i].x, rays[i].y);
-			Debug.DrawLine(start, start + Vector3.up * dist);
-			RaycastHit2D hit = Physics2D.Raycast(rays[i], Vector2.up, dist, groundLayer);
-			if (hit)
-			{	
-				Platform hitPlat = hit.collider.gameObject.GetComponent<Platform>();
-				if (hitPlat != null && hitPlat.m_PassThrough)
-				{
-					hit.collider.enabled = !movingUp;
-					StartCoroutine("RestoreCollider", hit.collider);
-					break;
+			Vector2[] rays = new Vector2[2];
+			Vector2 pos = new Vector2(transform.position.x, transform.position.y);
+			rays[0] = pos + width * Vector2.right;
+			rays[1] = pos - width * Vector2.right;
+			
+			for (int i = 0; i < rays.Length; ++i)
+			{
+				Vector3 start = new Vector3(rays[i].x, rays[i].y);
+				Debug.DrawLine(start, start + Vector3.up * dist);
+				RaycastHit2D hit = Physics2D.Raycast(rays[i], Vector2.up, dist, groundLayer);
+				if (hit)
+				{	
+					Platform hitPlat = hit.collider.gameObject.GetComponent<Platform>();
+					if (hitPlat != null && hitPlat.m_PassThrough)
+					{
+						Debug.Log("disas");
+						hitPlat.PassThrough();
+						passedThroughPlatforms.Add(hitPlat);
+						break;
+					}
 				}
 			}
 		}
-	}
-
-	IEnumerator RestoreCollider(Collider2D col)
-	{
-		yield return new WaitForSeconds(0.15f);
-		col.enabled = true;
+		else
+		{
+			if (passedThroughPlatforms.Count > 0)
+			{
+				Debug.Log("en" + passedThroughPlatforms.Count);
+				for (int i = 0; i < passedThroughPlatforms.Count; ++i)
+					passedThroughPlatforms[i].PassThroughDone();
+				passedThroughPlatforms.Clear();
+			}
+		}
 	}
 
 	IEnumerator MovementInput() {
@@ -88,14 +98,21 @@ public class PandaControl : MonoBehaviour {
 				facing = true;
 			}
 
-			if (!Physics2D.Raycast(transform.position + Vector3.up, facing ? Vector2.right : -Vector2.right, .75f, groundLayer) &&
-			    !Physics2D.Raycast(transform.position, facing ? Vector2.right : -Vector2.right, .75f, groundLayer) &&
-			    !Physics2D.Raycast(transform.position - Vector3.up, facing ? Vector2.right : -Vector2.right, .75f, groundLayer)) {
-				r.velocity = new Vector2(movement * moveSpeed, r.velocity.y);
-			}
-			else {
+			Vector2 pos = new Vector2(transform.position.x, transform.position.y);
+			Vector2[] rays = new Vector2[3];
+			rays[0] = pos + Vector2.up;
+			rays[1] = pos;
+			rays[2] = pos - Vector2.up;
+			Vector2 rayDir = facing ? -Vector2.right : Vector2.right;
+			bool hit = false;
+			for (int i = 0; i < rays.Length && !hit; ++i)
+				if (Physics2D.Raycast(rays[i], rayDir, 0.75f, groundLayer))
+					hit = true;
+
+			if (hit)
 				r.velocity = new Vector2(0, r.velocity.y);
-			}
+			else
+				r.velocity = new Vector2(movement * moveSpeed, r.velocity.y);
 
 			if (Physics2D.Raycast(transform.position + Vector3.right * .5f, -Vector2.up, 1.1f, groundLayer) ||
 			    Physics2D.Raycast(transform.position + Vector3.left * .5f, -Vector2.up, 1.1f, groundLayer))
